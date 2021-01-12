@@ -1,0 +1,216 @@
+function installOptiTrackToolbox(replaceExisting)
+
+%% Define required toolboxes
+requiredToolboxes = {...
+    'Transformation',...
+	'Plotting',...
+	'OptiTrackToolbox'};
+
+%% Assign tool/toolbox specific parameters
+dirName = 'mqttML';
+
+if nargin == 0
+    replaceExisting = [];
+end
+
+%% Check for toolbox directory
+toolboxRoot  = fullfile(matlabroot,'toolbox',dirName);
+isToolbox = exist(toolboxRoot,'file');
+if isToolbox == 7
+    % Apply replaceExisting argument
+    if isempty(replaceExisting)
+        choice = questdlg(sprintf(...
+            ['MATLAB Root already contains the mqttML Toolbox.\n',...
+            'Would you like to replace the existing toolbox?']),...
+            'Replace Existing mqttML Toolbox','Yes','No','Cancel','Yes');
+    elseif replaceExisting
+        choice = 'Yes';
+    else
+        choice = 'No';
+    end
+    % Replace existing or cancel installation
+    switch choice
+        case 'Yes'
+            % TODO - check if NatNet SDK components are running and close
+            % them prior to removing directory
+            rmpath(toolboxRoot);
+            [isRemoved, msg, msgID] = rmdir(toolboxRoot,'s');
+            if isRemoved
+                fprintf('Previous version of mqttML Toolbox removed successfully.\n');
+            else
+                fprintf('Failed to remove old mqttML Toolbox folder:\n\t"%s"\n',toolboxRoot);
+                fprintf(adminSolution);
+                error(msgID,msg);
+            end
+        case 'No'
+            fprintf('mqttML Toolbox currently exists, installation cancelled.\n');
+            return
+        case 'Cancel'
+            fprintf('Action cancelled.\n');
+            return
+        otherwise
+            error('Unexpected response.');
+    end
+end
+
+
+%% Create Toolbox Path
+[isDir,msg,msgID] = mkdir(toolboxRoot);
+if isDir
+    fprintf('mqttML toolbox folder created successfully:\n\t"%s"\n',toolboxRoot);
+else
+    fprintf('Failed to create mqttML Toolbox folder:\n\t"%s"\n',toolboxRoot);
+    fprintf(adminSolution);
+    error(msgID,msg);
+end
+
+%% Migrate toolbox folder contents
+toolboxContent = 'mqttMLToolboxFunctions';
+if ~isdir(toolboxContent)
+    error(sprintf(...
+        ['Change your working directory to the location of "installmqttMLToolbox.m".\n',...
+         '\n',...
+         'If this problem persists:\n',...
+         '\t(1) Unzip your original download of "mqttMLToolbox" into a new directory\n',...
+         '\t(2) Open a new instance of MATLAB "as administrator"\n',...
+         '\t\t(a) Locate MATLAB shortcut\n',...
+         '\t\t(b) Right click\n',...
+         '\t\t(c) Select "Run as administrator"\n',...
+         '\t(3) Change your "working directory" to the location of "installOptiTrackToolbox.m"\n',...
+         '\t(4) Enter "installmqttMLToolbox" (without quotes) into the command window\n',...
+         '\t(5) Press Enter.']));
+end
+files = dir(toolboxContent);
+wb = waitbar(0,'Copying mqttML Toolbox toolbox contents...');
+n = numel(files);
+fprintf('Copying mqttML Toolbox contents:\n');
+for i = 1:n
+    % source file location
+    source = fullfile(toolboxContent,files(i).name);
+    % destination location
+    destination = toolboxRoot;
+    if files(i).isdir
+        switch files(i).name
+            case '.'
+                %Ignore
+            case '..'
+                %Ignore
+            otherwise
+                fprintf('\t%s...',files(i).name);
+                nDestination = fullfile(destination,files(i).name);
+                [isDir,msg,msgID] = mkdir(nDestination);
+                if isDir
+                    [isCopy,msg,msgID] = copyfile(source,nDestination,'f');
+                    if isCopy
+                        fprintf('[Complete]\n');
+                    else
+                        bin = msg == char(10);
+                        msg(bin) = [];
+                        bin = msg == char(13);
+                        msg(bin) = [];
+                        fprintf('[Failed: "%s"]\n',msg);
+                    end
+                else
+                    bin = msg == char(10);
+                    msg(bin) = [];
+                    bin = msg == char(13);
+                    msg(bin) = [];
+                    fprintf('[Failed: "%s"]\n',msg);
+                end
+        end
+    else
+        fprintf('\t%s...',files(i).name);
+        [isCopy,msg,msgID] = copyfile(source,destination,'f');
+        
+        if isCopy == 1
+            fprintf('[Complete]\n');
+        else
+            bin = msg == char(10);
+            msg(bin) = [];
+            bin = msg == char(13);
+            msg(bin) = [];
+            fprintf('[Failed: "%s"]\n',msg);
+        end
+    end
+    waitbar(i/n,wb);
+end
+set(wb,'Visible','off');
+
+
+%% Save toolbox path
+%addpath(genpath(toolboxRoot),'-end');
+addpath(toolboxRoot,'-end');
+savepath;
+
+%% Install/Update required toolboxes
+for i = 1:numel(requiredToolboxes)
+    try
+        ToolboxUpdate(requiredToolboxes{i});
+    catch ME
+        fprintf(2,'[ERROR]\nUnable to install required toolbox: "%s"\n',requiredToolboxes{i});
+        fprintf(2,'\t%s\n',ME.message);
+    end
+end
+
+end
+
+function ToolboxUpdate(toolboxName)
+
+%% Setup functions
+ToolboxVer = str2func( sprintf('%sToolboxVer',toolboxName) );
+installToolbox = str2func( sprintf('install%sToolbox',toolboxName) );
+
+%% Check current version
+try
+    A = ToolboxVer;
+catch ME
+    A = [];
+    fprintf('No previous version of %s detected.\n',toolboxName);
+end
+
+%% Setup temporary file directory
+fprintf('Downloading the %s Toolbox...',toolboxName);
+tmpFolder = sprintf('%sToolbox',toolboxName);
+pname = fullfile(tempdir,tmpFolder);
+if isfolder(pname)
+    % Remove existing directory
+    [ok,msg] = rmdir(pname,'s');
+end
+% Create new directory
+[ok,msg] = mkdir(tempdir,tmpFolder);
+
+%% Download and unzip toolbox (GitHub)
+url = sprintf('https://github.com/pmmccorkell/%sToolbox/archive/master.zip',toolboxName);
+try
+    %fnames = unzip(url,pname);
+    %urlwrite(url,fullfile(pname,tmpFname));
+    tmpFname = sprintf('%sToolbox-master.zip',toolboxName);
+    websave(fullfile(pname,tmpFname),url);
+    fnames = unzip(fullfile(pname,tmpFname),pname);
+    delete(fullfile(pname,tmpFname));
+    
+    fprintf('SUCCESS\n');
+    confirm = true;
+catch ME
+    fprintf('FAILED\n');
+    confirm = false;
+    fprintf(2,'ERROR MESSAGE:\n\t%s\n',ME.message);
+end
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
