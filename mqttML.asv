@@ -234,7 +234,7 @@ classdef mqttML < matlab.mixin.SetGet % Handle
             topicPrefix = "OptiTrack/";
             topicSuffix = "/PosQua";
             buffer.Name = obj.opti.RigidBody.Name;
-            %buffer.
+            buffer.
             if (class(obj.opti.RigidBody) == "struct")
                 message = jsonencode(obj.opti.Position);
     			pub(topicPrefix+obj.opti.RigidBody.Name+topicSuffix,message);
@@ -244,6 +244,7 @@ classdef mqttML < matlab.mixin.SetGet % Handle
         function publishNames(obj)
             obj.serverConnect('10.60.17.244');
             topic = "OptiTrack/Control/Names";
+            msg=[];
             if (class(obj.opti.RigidBody)=="struct")
                 length = numel(obj.opti.RigidBody);
                 msg = strings(1,length);
