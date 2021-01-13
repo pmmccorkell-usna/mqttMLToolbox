@@ -7,6 +7,7 @@ classdef mqttML < matlab.mixin.SetGet % Handle
         mqtt                % MQTT client object
         mqtt_server         % MQTT server
         mqtt_connected      % MQTT connection status
+        Pythoncallback      % object of python script with function
         MESSAGE_CALLBACK    % MQTT callback function
     end % end properties
     
@@ -76,10 +77,15 @@ classdef mqttML < matlab.mixin.SetGet % Handle
             %py.print(pathexists)
             % Now that we know the toolbox directory is in the
             % Python default path list, we can import subCallback.py
-            Pythoncallback=py.importlib.import_module('subCallback');
+            obj.Pythoncallback=py.importlib.import_module('subCallback');
             
             % Assign MQTT subscription interrupt to subCallback.py
-            obj.MESSAGE_CALLBACK=Pythoncallback.MESSAGE_CALLBACK;
+            obj.MESSAGE_CALLBACK=obj.Pythoncallback.mqttML_CALLBACK;
+            %obj.MESSAGE_CALLBACK=obj.callback
+        end
+        
+        function callback(obj,client,userdata,message)
+            fprintf(message);
         end
         
         function initMQTT(obj)
@@ -229,22 +235,25 @@ classdef mqttML < matlab.mixin.SetGet % Handle
             end
         end
         
-        function publishPosQua(obj)
-            obj.serverConnect('10.60.17.244');
+        function publishPosQua(obj,varargin)
+            % obj.serverConnect('10.60.17.244');
             topicPrefix = "OptiTrack/";
             topicSuffix = "/PosQua";
-            buffer.Name = obj.opti.RigidBody.Name;
-            buffer.
-            if (class(obj.opti.RigidBody) == "struct")
-                message = jsonencode(obj.opti.Position);
-    			pub(topicPrefix+obj.opti.RigidBody.Name+topicSuffix,message);
+            if (class(varargin{1}) == "struct")
+                length = numel(varargin{1});
+                for i=1:length
+                    msg.FrameIndex = varargin{1}(i).FrameIndex
+                    msg.Position = varargin{1}(i).Position
+                    msg.Quaternion = varargin{1}(i).Quaternion
+                    topic=topicPrefix+varargin{1}(i).Name+topicSuffix
+                    obj.mqtt.publish(topic,jsonencode(msg))
+                end
             end
         end
-       
-        function publishNames(obj)
-            obj.serverConnect('10.60.17.244');
+        
+        function publishNames(obj,varargin)
+            % obj.serverConnect('10.60.17.244');
             topic = "OptiTrack/Control/Names";
-            msg=[];
             if (class(obj.opti.RigidBody)=="struct")
                 length = numel(obj.opti.RigidBody);
                 msg = strings(1,length);
@@ -254,7 +263,82 @@ classdef mqttML < matlab.mixin.SetGet % Handle
                 obj.mqtt.publish(topic,jsonencode(msg));
             end
         end
+
+        % pubDynamic(stringarray of objects in RigidBody to pull)
+        function pubDynamic(obj,varargin)
+            % Some error checking.
+            narginchk(2,2);
+            
+            % Assign dynamicMatch to the stringarray passed in.
+            dynamicMatch = varargin{1};
+            
+            % Check that MQTT client is connected to broker.
+            obj.serverConnect('10.69.17.244');
+            
+            % load the latest RigidBody data into a buffer
+            buffer = obj.opti.RigidBody;
+            
+            % Error check to ensure RigidBody is populated and dynamicMatch
+            % is a string/string array
+            if class(dynamicMatch=="py.list")
+                checkType="python"
+            else
+            if ((class(buffer)=="struct") && (class(dynamicMatch)=="py.list"))
+                % How many Rigid Bodies?
+                % nBodies = numel(buffer);
+                nBodies = py.len(dynamicMatch)
+
+                % How many fields in RigidBody are being populated into
+                % MQTT?
+                nFields = numel(dynamicMatch);
+                
+                % Create a string array for the Rigid Body names
+                msgNames = strings(1,nBodies);
+                
+                % Critically, this is the all important step: instantiate
+                % msg as an empty struct and we can fill it with things all
+                % day
+                %msg=struct
+                
+                % Iterate through the Rigid Bodies
+                for i=1:nBodies
+                    msg=struct;
+                    % Add e/ Rigid Body's name to the string array of Names
+                    msgNames(i)=buffer(i).Name;
+
+                    % Iterate through each of the string array fields and
+                    % populate the MQTT message.
+                    for j=1:nFields
+                        msg = setfield(msg,dynamicMatch(j),getfield(buffer,{i},dynamicMatch(j)));
+                    end
+                    % Publish the Dynamic message for each Rigid Body.
+                    obj.mqtt.publish("OptiTrack/"+msgNames(i)+"/Dynamic",jsonencode(msg));
+                end
+                % Publish the Control list of Rigid Body Names.
+                obj.mqtt.publish("OptiTrack/Control/Names",jsonencode(msgNames));
+            end
+        end
         
+        function pubStreamlined(obj)
+            obj.serverConnect('10.60.17.244');
+            buffer = obj.opti.RigidBody;
+            if (class(buffer)=="struct")
+                length = numel(buffer);
+                msgNames = strings(1,length);
+                for i=1:length
+                    msgNames(i)=buffer(i).Name;
+                    msgPosQua.FrameIndex = buffer(i).FrameIndex;
+                    msgPosQua.Position = buffer(i).Position;
+                    msgPosQua.Quaternion = buffer(i).Quaternion;
+                    obj.mqtt.publish("OptiTrack/"+msgNames(i)+"/PosQua",jsonencode(msgPosQua))
+                    obj.mqtt.publish("OptiTrack/"+msgNames(i)+"/PosRot",jsonencode(msgPosRot))
+                    obj.mqtt.publish("OptiTrack/"+msgNames(i)+"/Mark",jsonencode(msgPosQua))
+                    obj.mqtt.publish("OptiTrack/"+msgNames(i)+"/PosQuaMark",jsonencode(msgPosQua))
+                    obj.mqtt.publish("OptiTrack/"+msgNames(i)+"/PosRotMark",jsonencode(msgPosQua))
+                end
+                obj.mqtt.publish("OptiTrack/Control/Names",jsonencode(msgNames))
+            end
+        end
         
         % subscribe(topic='test',server=obj.defaultserver)
         function subscribe(obj,varargin)
