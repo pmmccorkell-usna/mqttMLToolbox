@@ -43,8 +43,13 @@ classdef mqttML < matlab.mixin.SetGet % Handle
             end
             if (autostart)
                 obj.initOptiTrack();
+                obj.subscribe('OptiTrack/Control/#')
             end
             obj.importPython();
+        end
+        
+        function reloadPython(obj)
+            obj.Pythoncallback=py.importlib.reload(obj.Pythoncallback);
         end
         
         function importPython(obj)
