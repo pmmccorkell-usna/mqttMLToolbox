@@ -10,11 +10,7 @@ classdef mqttML < matlab.mixin.SetGet % Handle
         Pythoncallback      % object of python script with function
         MESSAGE_CALLBACK    % MQTT callback function
     end % end properties
-    
-    properties(GetAccess='public', SetAccess='public')
-        RigidBodySettings   % User specified rigid body settings
-    end % end properties
-    
+        
     % --------------------------------------------------------------------
     % Constructor/Destructor
     % --------------------------------------------------------------------
@@ -25,6 +21,7 @@ classdef mqttML < matlab.mixin.SetGet % Handle
             obj.defaultserver='10.60.69.244';	% OptiTrack server in Hopper208, Jan 4 2021
             obj.initMQTT();
             autostart=0;
+            obj.importPython();
             if nargin >= 1
                 switch lower(varargin{1})
                     case 'multicast'
@@ -45,10 +42,10 @@ classdef mqttML < matlab.mixin.SetGet % Handle
                 obj.initOptiTrack();
                 obj.subscribe('OptiTrack/Control/#')
             end
-            obj.importPython();
         end
         
         function reloadPython(obj)
+            obj.Pythoncallback.mqttTerminate()
             obj.Pythoncallback=py.importlib.reload(obj.Pythoncallback);
         end
         
@@ -95,7 +92,7 @@ classdef mqttML < matlab.mixin.SetGet % Handle
         
         function initMQTT(obj)
             mqttClass = py.importlib.import_module('paho.mqtt.client');
-            obj.mqtt = mqttClass.Client(obj.localIP);
+            obj.mqtt = mqttClass.Client(obj.localIP+"/"+string(randi(1000)));
             obj.mqtt_connected=0;
             obj.mqtt_server=0;
         end
@@ -281,26 +278,28 @@ classdef mqttML < matlab.mixin.SetGet % Handle
             obj.serverConnect('10.60.17.244');
             
             % load the latest RigidBody data into a buffer
-            buffer = obj.opti.RigidBody
+            buffer = obj.opti.RigidBody;
             
             if (class(buffer)=="struct")
                 switch(class(dynamicMatch))
                     case 'py.list'
-                        fprintf("python found\r\n")
-                        nBodies = numel(buffer)
+                        fprintf("python found\r\n");
+                        nBodies = numel(buffer);
                         msgNames = strings(1,nBodies);
                         for i=1:nBodies
                             msgNames(i)=buffer(i).Name;
-                            pydict=py.dict(buffer(i))
+                            %pydict=py.dict(buffer(i))
+                            pydict = py.json.loads(jsonencode(buffer(i)))
+                            class(pydict)
                             obj.Pythoncallback.mqttML_pubDynamic(pydict)
                         end
                         obj.mqtt.publish("OptiTrack/Control/Names",jsonencode(msgNames));
                         
                     case 'string'
-                        fprintf("Matlab type found\r\n")
+                        fprintf("Matlab type found\r\n");
                         % How many Rigid Bodies?
                         % nBodies = numel(buffer);
-                        nBodies = numel(buffer)
+                        nBodies = numel(buffer);
 
                         % How many fields in RigidBody are being populated into
                         % MQTT?
@@ -332,7 +331,7 @@ classdef mqttML < matlab.mixin.SetGet % Handle
                         obj.mqtt.publish("OptiTrack/Control/Names",jsonencode(msgNames));
 
                     otherwise
-                        fprintf("Not a valid class/n/r")
+                        fprintf("Not a valid class/n/r");
                 end
             end
         end
@@ -394,6 +393,7 @@ classdef mqttML < matlab.mixin.SetGet % Handle
             obj.mqtt_connected=0;
             obj.mqtt_server=0;
             obj.mqtt.on_message=0;
+            obj.Pythoncallback.mqttTerminate();
         end
 
 		% Connect to MQTT broker
