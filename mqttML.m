@@ -267,57 +267,68 @@ classdef mqttML < matlab.mixin.SetGet % Handle
         % pubDynamic(stringarray of objects in RigidBody to pull)
         function pubDynamic(obj,varargin)
             % Some error checking.
-            narginchk(2,2);
+            %narginchk(2,2);
             
             % Assign dynamicMatch to the stringarray passed in.
             dynamicMatch = varargin{1};
             
             % Check that MQTT client is connected to broker.
-            obj.serverConnect('10.69.17.244');
+            obj.serverConnect('10.60.17.244');
             
             % load the latest RigidBody data into a buffer
-            buffer = obj.opti.RigidBody;
+            buffer = obj.opti.RigidBody
             
-            % Error check to ensure RigidBody is populated and dynamicMatch
-            % is a string/string array
-            switch(class(dynamicMatch))
-                case "py.list"
-                case 
-                otherwise
-            end
-            if ((class(buffer)=="struct") && (class(dynamicMatch)=="py.list"))
-                % How many Rigid Bodies?
-                % nBodies = numel(buffer);
-                nBodies = py.len(dynamicMatch)
+            if (class(buffer)=="struct")
+                switch(class(dynamicMatch))
+                    case 'py.list'
+                        fprintf("python found\r\n")
+                        nBodies = numel(buffer)
+                        msgNames = strings(1,nBodies);
+                        for i=1:nBodies
+                            msgNames(i)=buffer(i).Name;
+                            pydict=py.dict(buffer(i))
+                            obj.Pythoncallback.mqttML_pubDynamic(pydict)
+                        end
+                        obj.mqtt.publish("OptiTrack/Control/Names",jsonencode(msgNames));
+                        
+                    case 'string'
+                        fprintf("Matlab type found\r\n")
+                        % How many Rigid Bodies?
+                        % nBodies = numel(buffer);
+                        nBodies = numel(buffer)
 
-                % How many fields in RigidBody are being populated into
-                % MQTT?
-                nFields = numel(dynamicMatch);
-                
-                % Create a string array for the Rigid Body names
-                msgNames = strings(1,nBodies);
-                
-                % Critically, this is the all important step: instantiate
-                % msg as an empty struct and we can fill it with things all
-                % day
-                %msg=struct
-                
-                % Iterate through the Rigid Bodies
-                for i=1:nBodies
-                    msg=struct;
-                    % Add e/ Rigid Body's name to the string array of Names
-                    msgNames(i)=buffer(i).Name;
+                        % How many fields in RigidBody are being populated into
+                        % MQTT?
+                        nFields = numel(dynamicMatch);
 
-                    % Iterate through each of the string array fields and
-                    % populate the MQTT message.
-                    for j=1:nFields
-                        msg = setfield(msg,dynamicMatch(j),getfield(buffer,{i},dynamicMatch(j)));
-                    end
-                    % Publish the Dynamic message for each Rigid Body.
-                    obj.mqtt.publish("OptiTrack/"+msgNames(i)+"/Dynamic",jsonencode(msg));
+                        % Create a string array for the Rigid Body names
+                        msgNames = strings(1,nBodies);
+
+                        % Critically, this is the all important step: instantiate
+                        % msg as an empty struct and we can fill it with things all
+                        % day
+                        %msg=struct
+
+                        % Iterate through the Rigid Bodies
+                        for i=1:nBodies
+                            msg=struct;
+                            % Add e/ Rigid Body's name to the string array of Names
+                            msgNames(i)=buffer(i).Name;
+
+                            % Iterate through each of the string array fields and
+                            % populate the MQTT message.
+                            for j=1:nFields
+                                msg = setfield(msg,dynamicMatch(j),getfield(buffer,{i},dynamicMatch(j)));
+                            end
+                            % Publish the Dynamic message for each Rigid Body.
+                            obj.mqtt.publish("OptiTrack/"+msgNames(i)+"/Dynamic",jsonencode(msg));
+                        end
+                        % Publish the Control list of Rigid Body Names.
+                        obj.mqtt.publish("OptiTrack/Control/Names",jsonencode(msgNames));
+
+                    otherwise
+                        fprintf("Not a valid class/n/r")
                 end
-                % Publish the Control list of Rigid Body Names.
-                obj.mqtt.publish("OptiTrack/Control/Names",jsonencode(msgNames));
             end
         end
         
