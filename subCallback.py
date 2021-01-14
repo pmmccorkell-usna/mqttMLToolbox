@@ -45,26 +45,27 @@ def mqttML_pubDynamic(data):
 		client.publish(topic,jsonencode(msg))
 
 def AddObject(message):
+	msg = message.payload.decode().lower()
+	setlist = set(dynamicList)
 	global dynamicList, objectList
 	for obj in objectList:
-		if (message == obj.lower()):
+		if (msg == obj.lower()):
 			print("found match to: "+obj)
 			setlist.add(obj)
 			dynamicList = list(setlist)
 
 def defaultFunction(whatever):
-	print("Not a valid Object")
+	print("Discarding. No filter for topic "+str(whatever.topic)+" discovered.")
 
-topic_outsourcing={
-'OptiTrack/Control/AddObject':AddObject
-}
 def mqttML_CALLBACK(client,userdata,message):
-	setlist = set(dynamicList)
-	msg=message.payload.decode().lower()
-	print(msg)
-	
-	function=topic_outsourcing.get(message.topic,defaultFunction)(msg)
+	#msg=message.payload.decode().lower()
+	#print(msg)
 	#if msg.topic == 'OptiTrack/Control/AddObject'
+	topic_outsourcing={
+		'OptiTrack/Control/AddObject':AddObject,
+		'default':defaultFunction
+	}
+	topic_outsourcing.get(message.topic,default)(message)
 
 
 debugServerIP = '127.0.0.1'
