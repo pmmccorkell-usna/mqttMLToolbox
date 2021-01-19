@@ -98,7 +98,7 @@ def dontdonothing():
 	
 # Called from Matlab.
 # Accepts 1 RigidBody struct at a time, passed in as a python dict.
-# Publishes the objects that match dynamicList from the RigidBody.
+# Publishes the objects that match dynamicList from the RigidBody struct.
 def mqttML_pubDynamic(data):
 	msg={}
 	connectMQTT()
@@ -153,9 +153,9 @@ def mqttTerminate():
 	is_connected=0
 	print("Terminated python MQTT")
 
-#########################################################
-###################### DEBUGGING ########################
-#########################################################
+############################################################
+###################### DEBUGGING ###########################
+############################################################
 
 # Topics for Debugger to subscribe to.
 # Global so user can edit list w/o reloading script.
@@ -164,7 +164,6 @@ debugTopics = ['OptiTrack/Control/#','test']
 # Passthrough for debugging in Python environment.
 def debugSubscription():
 	global client, buffer
-	
 
 	# Create a global dummy buffer to simulate a RigidBody object from Matlab.
 	buffer = {'Name': 'vroom', 'FrameIndex': 33386087, 'TimeStamp': 531712.59596601, 'FrameLatency': 1.2978, 'isTracked': True, 'Position': [-555.4297566413879, 1133.2718133926392, 580.9705853462219], 'Quaternion': [-0.9823990057235511, 0.03210517614039003, -0.04536310217498993, 0.17833529490184152], 'Rotation': [[0.9322774120833481, -0.35330567107334326, -0.07767837348058937], [0.34748010858269623, 0.9343315498255698, -0.07925988354714225], [0.10058032142786663, 0.04690050946379489, 0.9938228922466537]], 'HgTransform': [[0.9322774120833481, -0.35330567107334326, -0.07767837348058937, -555.4297566413879], [0.34748010858269623, 0.9343315498255698, -0.07925988354714225, 1133.2718133926392], [0.10058032142786663, 0.04690050946379489, 0.9938228922466537, 580.9705853462219], [0, 0, 0, 1]], 'MarkerPosition': [[-534.112811088562, -585.0552916526794, -547.1159219741821], [1073.0293989181519, 1132.2520971298218, 1194.5387125015259], [574.7097134590149, 585.7723355293274, 582.3908448219299]], 'MarkerSize': [12.136011384427547, 15.373353846371174, 11.472992599010468]}
@@ -179,7 +178,7 @@ def debugSubscription():
 		client.subscribe(topic)
 		print("Subscribed to: " + topic)
 
-# Sample. Not used. Available to reroute Debugging Subscriber here. #
+# Sample. Not used. Available to reroute Debugging Subscriber here.
 def MESSAGE_CALLBACK(client,userdata,message):
 	print()
 	print("mqtt rx:")
