@@ -142,16 +142,6 @@ classdef mqttML < matlab.mixin.SetGet % Handle
                 hostIP = obj.defaultserver;
             end
             if nargin > 2
-                % Define connection type
-%                 switch lower(varargin{2})
-%                     case 'multicast'
-%                         mode = lower(varargin{2});
-%                     case 'unicast'
-%                         mode = lower(varargin{2});
-%                     otherwise
-%                         error('OptiTrack:Init:BadConnectionType',...
-%                             'Connection property "%s" not recognized.',varargin{2});
-%                 end
                 mode = lower(varargin{2});
             end
            
@@ -169,62 +159,73 @@ classdef mqttML < matlab.mixin.SetGet % Handle
 			obj.opti=OptiTrack;
 			obj.opti.Initialize(hostIP,mode);
         end
+
+        function timerSampleJSON(obj,nExecution)
+            % nExecution=varargin{1}
+            filename = sprintf('C:/Python/rigidbody %s.txt',(datestr(now,'yyyymmdd-HHMM.SS.FFF')))
+            samplefile = fopen(filename,'w');
+            interrupt = timer('ExecutionMode','fixedRate','TimerFcn',@(src,evt)obj.SampleJSONfile(samplefile),'Period',.001,'TasksToExecute',nExecution,'UserData',samplefile);
+            % Starts a stopwatch when timer Starts.
+            interrupt.StartFcn='tic';
+            % Stops the stopwatch when timer Stops.
+            interrupt.StopFcn=@(src,evt)obj.printtoc(nExecution,samplefile)
+            interrupt.start
+            %fprintf(samplefile,"\r\n%d samples",nExecution)
+            fclose(samplefile);
+            interrupt.delete
+        end
+        
+        % Appends the output of the stopwatch to the end of the logfile.
+        function printtoc(obj,nsample,thefile)
+            fprintf(thefile,"\r\n%d samples in %f seconds",nsample,toc);
+        end
+        
+        function SampleJSONfile(obj,thefile)
+            % thefile = varargin{1};
+            len = numel(obj.opti.RigidBody);
+            for i=1:len
+                fprintf(thefile,jsonencode(obj.opti.RigidBody(i)));
+                fprintf(thefile,'\r');
+            end
+        end
         
         % Saves the entire RigidBody data to a file.
         % arg1: Sample rate in Hz
         % arg2=infinity, # of Samples to send.
-        function SampletoJSONfile(obj,varargin)
-            samplefile = fopen('C:/Python/rigidbody.txt','w');
-            sleeptime=1/varargin{1};
+        function SampleJSONfileloop(obj,varargin)
+            filename = sprintf('C:/Python/rigidbody %s.txt',(datestr(now,'yyyymmdd-HHMM.SS.FFF')))
+            samplefile = fopen(filename,'w');
+            if (nargin>1)
+                sleeptime=1/varargin{1};
+            else
+                sleeptime=0;
+            end
             if (nargin>2)
                 samples=varargin{2};
                 for i=0:1:samples
-                    fprintf(samplefile,jsonencode(obj.opti.RigidBody))
+                    len = numel(obj.opti.RigidBody);
+                    for i=1:len
+                        fprintf(samplefile,jsonencode(obj.opti.RigidBody(i)));
+                        fprintf('\r');
+                    end
                     pause(sleeptime);
                 end
             else
                 while (true)
-                    fprintf(samplefile,jsonencode(obj.opti.RigidBody))
+                    len = numel(obj.opti.RigidBody);
+                    for i=1:len
+                        fprintf(samplefile,jsonencode(obj.opti.RigidBody(i)));
+                        fprintf(samplefile,'\r');
+                    end
                     pause(sleeptime);
                 end
             end
+            fclose(filename)
         end
 
-        % publish(frequency=50Hz, n samples=infinity, server=127.0.0.1)
-        % Publishes the entire RigidBody data as a JSON message.
-        % arg1: Sample rate in Hz
-        % arg2=infinity, # of Samples to send.
-        function publish(obj,varargin)
-            %clientname=obj.localIP
-			%mqtt = py.paho.mqtt.client.Client(clientname)
-            %mqtt.reinitialise(clientname)
-            if (nargin>3)
-                server=varargin{3};
-            elseif (obj.mqtt_server)
-                server=obj.mqtt_server;
-            else
-                server=obj.defaultserver;
-            end
-            obj.serverConnect(server);
-            sleeptime=1/varargin{1};
-            nsamples=0;
-            if (nargin>2)
-                nsamples=varargin{2};
-            end
-			
-			% If the # of samples to take was specified, do that.
-            if (nsamples)
-                for i=0:1:nsamples
-                    obj.mqtt.publish("RigidBody",jsonencode(obj.opti.RigidBody));
-                    pause(sleeptime);
-                end
-			% Otherwise, to infinity and beyond !
-            else
-                while (true)
-                    obj.mqtt.publish("RigidBody",jsonencode(obj.opti.RigidBody));
-                    pause(sleeptime);
-                end
-            end
+        function publishAll(obj)
+            publishRigidBody(obj)
+            publishPosQua(obj)
         end
 
 		function publishRigidBody(obj)
