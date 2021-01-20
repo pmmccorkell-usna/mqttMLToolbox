@@ -32,34 +32,6 @@ objectList= [
 	'MarkerSize'
 ]
 
-# Dictionary used to store function() locations.
-# MQTT topics are the keys, and they're associated to the 
-# respective function location to be executed for that topic.
-topic_outsourcing={
-	'OptiTrack/Control/AddObject':AddObject,
-	'OptiTrack/Control/Names':dontdonothing,
-	'default':defaultFunction
-}
-# Callback for MQTT subscriptions.
-# Called as Interrupt by paho-mqtt when a subscribed topic is received.
-# 
-def mqttML_CALLBACK(client,userdata,message):
-	################# EXAMPLE START ##################
-	# print(message.payload.decode())
-	# print(message.topic)
-	# msg=message.payload.decode().lower()
-	# if (msg.topic == 'OptiTrack/Control/AddObject'):
-		# AddObject(message)
-	################# EXAMPLE END ####################
-	
-	# Get the function associated to the MQTT topic.
-	# load the defaultFunction if an associated topic is not found.
-	topicFunction=topic_outsourcing.get(message.topic,defaultFunction)
-	
-	# Execute the function associated to the MQTT topic, 
-	# passing the MQTT message.
-	topicFunction(message)
-
 # Receives message data from MQTT callback function.
 # Scans and adds matches to dynamicList.
 def AddObject(data):
@@ -89,6 +61,34 @@ def defaultFunction(whatever):
 def dontdonothing():
 	lennon=1j
 	return trueExp(lennon*pie)
+
+# Dictionary used to store function() locations.
+# MQTT topics are the keys, and they're associated to the 
+# respective function location to be executed for that topic.
+topic_outsourcing={
+	'OptiTrack/Control/AddObject':AddObject,
+	'OptiTrack/Control/Names':dontdonothing,
+	'default':defaultFunction
+}
+# Callback for MQTT subscriptions.
+# Called as Interrupt by paho-mqtt when a subscribed topic is received.
+# 
+def mqttML_CALLBACK(client,userdata,message):
+	################# EXAMPLE START ##################
+	# print(message.payload.decode())
+	# print(message.topic)
+	# msg=message.payload.decode().lower()
+	# if (msg.topic == 'OptiTrack/Control/AddObject'):
+		# AddObject(message)
+	################# EXAMPLE END ####################
+	
+	# Get the function associated to the MQTT topic.
+	# load the defaultFunction if an associated topic is not found.
+	topicFunction=topic_outsourcing.get(message.topic,defaultFunction)
+	
+	# Execute the function associated to the MQTT topic, 
+	# passing the MQTT message.
+	topicFunction(message)
 
 
 ############################################################

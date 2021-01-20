@@ -344,13 +344,25 @@ classdef mqttML < matlab.mixin.SetGet % Handle
                     msgPosQua.FrameIndex = buffer(i).FrameIndex;
                     msgPosQua.Position = buffer(i).Position;
                     msgPosQua.Quaternion = buffer(i).Quaternion;
+                    msgPosRot.FrameIndex = buffer(i).FrameIndex;
+                    msgPosRot.Position = buffer(i).Position;
+                    msgPosRot.Rotation = buffer(i).Rotation;
+                    msgMark. = 
+                    %
+%
+%
+%           finish fleshing these out
+%
+%
+%
                     obj.mqtt.publish("OptiTrack/"+msgNames(i)+"/PosQua",jsonencode(msgPosQua))
                     obj.mqtt.publish("OptiTrack/"+msgNames(i)+"/PosRot",jsonencode(msgPosRot))
-                    obj.mqtt.publish("OptiTrack/"+msgNames(i)+"/Mark",jsonencode(msgPosQua))
-                    obj.mqtt.publish("OptiTrack/"+msgNames(i)+"/PosQuaMark",jsonencode(msgPosQua))
-                    obj.mqtt.publish("OptiTrack/"+msgNames(i)+"/PosRotMark",jsonencode(msgPosQua))
+                    obj.mqtt.publish("OptiTrack/"+msgNames(i)+"/Mark",jsonencode(msgMark))
+                    obj.mqtt.publish("OptiTrack/"+msgNames(i)+"/PosQuaMark",jsonencode(msgPosQuaMark))
+                    obj.mqtt.publish("OptiTrack/"+msgNames(i)+"/PosRotMark",jsonencode(msgPosRotMark))
+                    obj.pubDynamic(obj.Pythoncallback.dynamicList)
                 end
-                obj.mqtt.publish("OptiTrack/Control/Names",jsonencode(msgNames))
+                % obj.mqtt.publish("OptiTrack/Control/Names",jsonencode(msgNames))
             end
         end
         
