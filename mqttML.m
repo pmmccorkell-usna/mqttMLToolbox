@@ -269,10 +269,7 @@ classdef mqttML < matlab.mixin.SetGet % Handle
 
         % pubDynamic(stringarray of objects in RigidBody to pull)
         function pubDynamic(obj,varargin)
-            % Some error checking.
-            %narginchk(2,2);
-            
-            % Assign dynamicMatch to the stringarray passed in.
+            % Assign dynamicMatch to the list passed in.
             dynamicMatch = varargin{1};
             
             % Check that MQTT client is connected to broker.
@@ -283,16 +280,15 @@ classdef mqttML < matlab.mixin.SetGet % Handle
             
             if (class(buffer)=="struct")
                 switch(class(dynamicMatch))
-                    case 'py.list'
-                        fprintf("python found\r\n");
+                    case 'py.set'
+                        fprintf("python type found\r\n");
                         nBodies = numel(buffer);
                         msgNames = strings(1,nBodies);
                         for i=1:nBodies
                             msgNames(i)=buffer(i).Name;
-                            %pydict=py.dict(buffer(i))
-                            pydict = py.json.loads(jsonencode(buffer(i)))
-                            class(pydict)
-                            obj.Pythoncallback.mqttML_pubDynamic(pydict)
+                            pydict = py.json.loads(jsonencode(buffer(i)));
+                            class(pydict);
+                            obj.Pythoncallback.mqttML_pubDynamic(pydict);
                         end
                         obj.mqtt.publish("OptiTrack/Control/Names",jsonencode(msgNames));
                         
