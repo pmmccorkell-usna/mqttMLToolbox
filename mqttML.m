@@ -347,7 +347,7 @@ classdef mqttML < matlab.mixin.SetGet % Handle
                     msgPosRot.FrameIndex = buffer(i).FrameIndex;
                     msgPosRot.Position = buffer(i).Position;
                     msgPosRot.Rotation = buffer(i).Rotation;
-                    msgMark. = 
+%                    msgMark. = 
                     %
 %
 %
