@@ -1,0 +1,11 @@
+For pip failure in Windows10 related to "connector error SSL CERTIFICATE_VERIFY_FAILED".
+This is due to man-in-the-middle certificates used within academic network.
+
+Solution - declare typical pip repository websites as globally trusted.
+
+Install this folder w/file such that:
+C:\Users\<username>\AppData\Roaming\pip\pip.ini
+
+
+Solution and Discussion with more options:
+https://stackoverflow.com/questions/25981703/pip-install-fails-with-connection-error-ssl-certificate-verify-failed-certi
