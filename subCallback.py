@@ -10,6 +10,46 @@ from cmath import exp as trueExp
 # Starts empty. See 'objectList' for the totality of possible contents.
 dynamicList = set()
 
+############################################################
+################# MQTT CONNECTION HANDLING #################
+############################################################
+
+is_connected=0
+
+clientname="MLpyDynamic"+str(randint(1000,9999))
+client=MQTT.Client(clientname)
+
+# Connect to MQTT broker.
+def mqttConnect():
+	global client, is_connected
+
+	# Some settings for MQTT connection.
+	# serverIP = '127.0.0.1'	# loopback
+	serverIP = '10.60.69.244'	# OptiTrack server
+	
+	# Unique clientname. Random element to prevent collisions during
+	# frequent reconnections, outages, intermittent issues, etc.
+	
+
+	# Only connect if not already connected.
+	if not is_connected:
+		client.connect(serverIP)
+		client.loop_start()
+		print("Connected to "+serverIP)
+		is_connected=1
+	# else:
+		# shhhh
+		# print("Already connected")
+
+# Break connection to MQTT broker.
+# Called from within Matlab to properly deconstruct MQTT client.
+def mqttTerminate():
+	global client
+	client.loop_stop()
+	client.disconnect()
+	is_connected=0
+	print("Terminated python MQTT")
+
 
 #####################################################################
 ####################### SUBSCRIPTION CALLBACK #######################
@@ -60,7 +100,8 @@ def defaultFunction(whatever):
 # Redirect from MQTT callback function when no action is required.
 def dontdonothing():
 	lennon=1j
-	return trueExp(lennon*pie)
+	nothingtoseehere=trueExp(lennon*pie)
+	print(nothingtoseehere)
 
 # Dictionary used to store function() locations.
 # MQTT topics are the keys, and they're associated to the 
@@ -101,57 +142,21 @@ def mqttML_CALLBACK(client,userdata,message):
 # Publishes the objects that match dynamicList from the RigidBody struct.
 def mqttML_pubDynamic(data):
 	msg={}
-	connectMQTT()
+	mqttConnect()
 	
 	# Construct the topic from the RigidBody's Name.
-	topic='OptiTrack/'+data.get('Name','PYTHON_TOPIC_ERROR')+'/Dynamic'
+	ObjName = "PYTHONERROR_RigidBody_corrupted"
+	ObjName = data.get('Name')
+	dynamictopic='OptiTrack/'+ObjName+'/Dynamic'
 	
 	# Populate msg with the objects in dynamicList
 	for obj in dynamicList:
 		msg[obj]=data[obj]
 	
 	# Publish json-ified msg to MQTT broker.
-	client.publish(topic,dumps(msg))
+	client.publish(dynamictopic,dumps(msg))
+	# print('published msg: '+dumps(msg) + ' on topic: '+dynamictopic)
 
-
-############################################################
-################# MQTT CONNECTION HANDLING #################
-############################################################
-
-is_connected=0
-
-
-# Connect to MQTT broker.
-def mqttConnect():
-	global client, is_connected
-
-	# Some settings for MQTT connection.
-	# serverIP = '127.0.0.1'	# loopback
-	serverIP = '10.60.69.244'	# OptiTrack server
-	
-	# Unique clientname. Random element to prevent collisions during
-	# frequent reconnections, outages, intermittent issues, etc.
-	clientname="MLpyDynamic"+str(randint(1000,9999))
-	client=MQTT.Client(clientname)
-
-	# Only connect if not already connected.
-	if not is_connected:
-		client.connect(serverIP)
-		client.loop_start()
-		print("Connected to "+serverIP)
-		is_connected=1
-	# else:
-		# shhhh
-		# print("Already connected")
-
-# Break connection to MQTT broker.
-# Called from within Matlab to properly deconstruct MQTT client.
-def mqttTerminate():
-	global client, is_connected
-	client.loop_stop()
-	client.disconnect()
-	is_connected=0
-	print("Terminated python MQTT")
 
 ############################################################
 ###################### DEBUGGING ###########################
@@ -168,11 +173,11 @@ def debugSubscription():
 	# Create a global dummy buffer to simulate a RigidBody object from Matlab.
 	buffer = {'Name': 'vroom', 'FrameIndex': 33386087, 'TimeStamp': 531712.59596601, 'FrameLatency': 1.2978, 'isTracked': True, 'Position': [-555.4297566413879, 1133.2718133926392, 580.9705853462219], 'Quaternion': [-0.9823990057235511, 0.03210517614039003, -0.04536310217498993, 0.17833529490184152], 'Rotation': [[0.9322774120833481, -0.35330567107334326, -0.07767837348058937], [0.34748010858269623, 0.9343315498255698, -0.07925988354714225], [0.10058032142786663, 0.04690050946379489, 0.9938228922466537]], 'HgTransform': [[0.9322774120833481, -0.35330567107334326, -0.07767837348058937, -555.4297566413879], [0.34748010858269623, 0.9343315498255698, -0.07925988354714225, 1133.2718133926392], [0.10058032142786663, 0.04690050946379489, 0.9938228922466537, 580.9705853462219], [0, 0, 0, 1]], 'MarkerPosition': [[-534.112811088562, -585.0552916526794, -547.1159219741821], [1073.0293989181519, 1132.2520971298218, 1194.5387125015259], [574.7097134590149, 585.7723355293274, 582.3908448219299]], 'MarkerSize': [12.136011384427547, 15.373353846371174, 11.472992599010468]}
 
-	# Setup MQTT connection
-	client.on_message=mqttML_CALLBACK
 	# client.on_message=MESSAGE_CALLBACK
 	mqttConnect()
-	
+	# Setup MQTT connection
+	client.on_message=mqttML_CALLBACK
+
 	# Subscribe to topics
 	for topic in debugTopics:
 		client.subscribe(topic)

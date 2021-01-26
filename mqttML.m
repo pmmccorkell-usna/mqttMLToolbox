@@ -18,7 +18,8 @@ classdef mqttML < matlab.mixin.SetGet % Handle
         function obj = mqttML(varargin)
             % Create OptiTrack object.
 			obj.getIP();
-            obj.defaultserver='10.60.69.244';	% OptiTrack server in Hopper208, Jan 4 2021
+            obj.defaultserver='10.60.69.244';	% OptiTrack server in Hopper208, Jan 2021
+            obj.mqtt_server=0;
             obj.initMQTT();
             autostart=0;
             obj.importPython();
@@ -44,9 +45,24 @@ classdef mqttML < matlab.mixin.SetGet % Handle
             end
         end
         
+        % Function to reload the python script.
+        % Use when editing subCallback.py on the fly, without having to
+        %   close and reopen Matlab.
         function reloadPython(obj)
-            obj.Pythoncallback.mqttTerminate()
+            % Disconnect MQTT.
+            obj.uninitMQTT()
+            obj.mqtt_connected=0;
+            
+            % Reload the python script.
             obj.Pythoncallback=py.importlib.reload(obj.Pythoncallback);
+            
+            % Attempt to reconnect to MQTT.
+            try
+                obj.serverConnect(obj.mqtt_server);
+                obj.subscribe('OptiTrack/Control/#')
+            catch
+                fprintf('could not init mqtt.\r\n');
+            end
         end
         
         function importPython(obj)
@@ -64,10 +80,11 @@ classdef mqttML < matlab.mixin.SetGet % Handle
             try
                 % .index method returns an integer if the string is found.
                 % If not found, in MatLab it throws a Python Exception.
-                % Behavior is not different outside Matlab.
+                % Behavior is different outside Matlab.
                 pathexists=pathlist.index(installPath);
             catch ME
                 %fprintf(ME.identifier+"\r\n")
+                
                 % If the exception is Python, assume it's because the
                 % directory string was not found in the list.
                 % And add it to the list.
@@ -77,44 +94,56 @@ classdef mqttML < matlab.mixin.SetGet % Handle
                 end
             end
             %py.print(pathexists)
+            
             % Now that we know the toolbox directory is in the
             % Python default path list, we can import subCallback.py
             obj.Pythoncallback=py.importlib.import_module('subCallback');
             
             % Assign MQTT subscription interrupt to subCallback.py
             obj.MESSAGE_CALLBACK=obj.Pythoncallback.mqttML_CALLBACK;
-            %obj.MESSAGE_CALLBACK=obj.callback
         end
         
-        function callback(obj,client,userdata,message)
-            fprintf(message);
-        end
-        
+        % Initialize MQTT class in Python
         function initMQTT(obj)
             mqttClass = py.importlib.import_module('paho.mqtt.client');
-            obj.mqtt = mqttClass.Client(obj.localIP+"/"+string(randi(1000)));
+            mqtt_name = obj.localIP+"/"+string(randi(1000));
+            obj.mqtt = mqttClass.Client(mqtt_name);
             obj.mqtt_connected=0;
-            obj.mqtt_server=0;
+            %obj.mqtt_server=0;
         end
 
+        % Properly stop and exit MQTT class in Python.
 		function uninitMQTT(obj)
 			fprintf('Uninitializing MQTT object...');
+            
+            % Exit Matlab's MQTT connection.
             if (obj.mqtt_connected)
                 obj.mqtt.loop_stop();
                 obj.mqtt.disconnect();
+                obj.mqtt_connected=0;
             end
             obj.mqtt=[];
+            
+            % Exit the callback script's MQTT connection
+            %   (used for Dynamic topics)
+            obj.Pythoncallback.client.loop_stop();
+            obj.Pythoncallback.client.disconnect();
 			fprintf('[COMPLETE]\n');
-		end
+        end
 		
+        % Passthrough to OptiTrack toolbox to properly deconstruct.
 		function uninitOpti(obj)
 			obj.opti.delete();
 			obj.opti=[];
-		end
+        end
         
+        % Properly deconstruct this class.
         function delete(obj)
             % delete function destructor
 			obj.uninitMQTT();
+            
+            % Check if OptiTrack Toolbox was instantiated, and deconstruct
+            %        if it was
             optiInstantiated = class(obj.opti);
             if (optiInstantiated == "OptiTrack")
                 obj.uninitOpti();
@@ -128,6 +157,7 @@ classdef mqttML < matlab.mixin.SetGet % Handle
     % Initialization
     % --------------------------------------------------------------------
     methods(Access='public')
+        
         % Initialize(hostIP,mode)
         function initOptiTrack(obj,varargin)
             % narginchk(1,3);
@@ -146,20 +176,16 @@ classdef mqttML < matlab.mixin.SetGet % Handle
             end
            
             % Check IP
-            % TODO - check for valid IP address
             if ~ischar(hostIP)
                 error('OptiTrack:Init:BadIP',...
                     'The host IP must be specified as a character/string input (e.g. ''192.168.1.1'').');
-            end
-            if ~ischar(clientIP)
-                error('OptiTrack:Init:BadIP',...
-                    'The client IP must be specified as a character/string input (e.g. ''192.168.1.1'').');
             end
 
 			obj.opti=OptiTrack;
 			obj.opti.Initialize(hostIP,mode);
         end
 
+        
         function timerSampleJSON(obj,nExecution)
             % nExecution=varargin{1}
             filename = sprintf('C:/Python/rigidbody %s.txt',(datestr(now,'yyyymmdd-HHMM.SS.FFF')))
@@ -223,39 +249,44 @@ classdef mqttML < matlab.mixin.SetGet % Handle
             fclose(filename)
         end
 
-        function publishAll(obj)
-            publishRigidBody(obj)
-            publishPosQua(obj)
-        end
-
 		function publishRigidBody(obj)
-			obj.serverConnect('10.60.17.244');
+			obj.serverConnect(obj.mqtt_server);
 			topicPrefix = "OptiTrack/";
 			topicSuffix = "/RigidBody";
             if (class(obj.opti.RigidBody) == "struct")
-                message = jsonencode(obj.opti.RigidBody);
-    			pub(topicPrefix+obj.opti.RigidBody.Name+topicSuffix,message);
+                length = numel(obj.opti.RigidBody);
+                for i=1:length
+                    message = jsonencode(obj.opti.RigidBody);
+                    topic=topicPrefix+obj.opti.RigidBody(i).Name+topicSuffix;
+                    obj.mqtt.publish(topic,message);
+                    %fprintf("published "+topic+"\r");
+                end
             end
         end
         
         function publishPosQua(obj,varargin)
-            % obj.serverConnect('10.60.17.244');
+            obj.serverConnect(obj.mqtt_server);
             topicPrefix = "OptiTrack/";
             topicSuffix = "/PosQua";
-            if (class(varargin{1}) == "struct")
-                length = numel(varargin{1});
+            object = obj.opti.RigidBody;
+            if nargin>1
+                object = varargin{1};
+            end
+            if (class(object) == "struct")
+                length = numel(object);
                 for i=1:length
-                    msg.FrameIndex = varargin{1}(i).FrameIndex
-                    msg.Position = varargin{1}(i).Position
-                    msg.Quaternion = varargin{1}(i).Quaternion
-                    topic=topicPrefix+varargin{1}(i).Name+topicSuffix
-                    obj.mqtt.publish(topic,jsonencode(msg))
+                    msg.FrameIndex = object(i).FrameIndex;
+                    msg.Position = object(i).Position;
+                    msg.Quaternion = object(i).Quaternion;
+                    topic=topicPrefix+object(i).Name+topicSuffix;
+                    obj.mqtt.publish(topic,jsonencode(msg));
+                    %fprintf("published "+topic+"\r");
                 end
             end
         end
         
         function publishNames(obj,varargin)
-            % obj.serverConnect('10.60.17.244');
+            obj.serverConnect(obj.mqtt_server);
             topic = "OptiTrack/Control/Names";
             if (class(obj.opti.RigidBody)=="struct")
                 length = numel(obj.opti.RigidBody);
@@ -264,16 +295,21 @@ classdef mqttML < matlab.mixin.SetGet % Handle
                     msg(i) = obj.opti.RigidBody(i).Name;
                 end
                 obj.mqtt.publish(topic,jsonencode(msg));
+                fprintf("published: "+topic+"\r");
             end
         end
 
         % pubDynamic(stringarray of objects in RigidBody to pull)
         function pubDynamic(obj,varargin)
-            % Assign dynamicMatch to the list passed in.
-            dynamicMatch = varargin{1};
+            % Assign dynamicMatch to the list passed in, or use the default
+            %   Python Set from the MQTT callback function
+            dynamicMatch=obj.Pythoncallback.dynamicList;
+            if nargin>1
+                dynamicMatch = varargin{1};
+            end
             
             % Check that MQTT client is connected to broker.
-            obj.serverConnect('10.60.17.244');
+            obj.serverConnect(obj.mqtt_server);
             
             % load the latest RigidBody data into a buffer
             buffer = obj.opti.RigidBody;
@@ -281,19 +317,28 @@ classdef mqttML < matlab.mixin.SetGet % Handle
             if (class(buffer)=="struct")
                 switch(class(dynamicMatch))
                     case 'py.set'
-                        fprintf("python type found\r\n");
+                        % fprintf("python type found\r\n");
                         nBodies = numel(buffer);
                         msgNames = strings(1,nBodies);
                         for i=1:nBodies
                             msgNames(i)=buffer(i).Name;
+                            % Use JSON to translate MatLab Struct of RigidBody
+                            %       into a Python Dictionary.
                             pydict = py.json.loads(jsonencode(buffer(i)));
-                            class(pydict);
+                            % Debugging to verify pydict is a python dictionary.
+                            % class(pydict);
+                            
+                            % Pass the RigidBody struct, now saved as a Python Dictionary (pydict)
+                            %   to the Python script where it can be
+                            %   matched against the callback set dynamicList
                             obj.Pythoncallback.mqttML_pubDynamic(pydict);
                         end
-                        obj.mqtt.publish("OptiTrack/Control/Names",jsonencode(msgNames));
+                        % Optionally publish the Names. Or handle
+                        % independantly.
+                        % obj.mqtt.publish("OptiTrack/Control/Names",jsonencode(msgNames));
                         
                     case 'string'
-                        fprintf("Matlab type found\r\n");
+                        % fprintf("Matlab type found\r\n");
                         % How many Rigid Bodies?
                         % nBodies = numel(buffer);
                         nBodies = numel(buffer);
@@ -334,35 +379,46 @@ classdef mqttML < matlab.mixin.SetGet % Handle
         end
         
         function pubStreamlined(obj)
-            obj.serverConnect('10.60.17.244');
+            obj.serverConnect(obj.mqtt_server);
             buffer = obj.opti.RigidBody;
             if (class(buffer)=="struct")
                 length = numel(buffer);
                 msgNames = strings(1,length);
                 for i=1:length
+                    
+                    % Populate all the MQTT messages with the relevant data.
                     msgNames(i)=buffer(i).Name;
-                    msgPosQua.FrameIndex = buffer(i).FrameIndex;
+                    index = buffer(i).FrameIndex;
+                    msgMark.FrameIndex = index;
+                    msgPosQua.FrameIndex = index;
+                    msgPosRot.FrameIndex = index;
+
                     msgPosQua.Position = buffer(i).Position;
                     msgPosQua.Quaternion = buffer(i).Quaternion;
-                    msgPosRot.FrameIndex = buffer(i).FrameIndex;
                     msgPosRot.Position = buffer(i).Position;
                     msgPosRot.Rotation = buffer(i).Rotation;
-%                    msgMark. = 
-                    %
-%
-%
-%           finish fleshing these out
-%
-%
-%
-                    obj.mqtt.publish("OptiTrack/"+msgNames(i)+"/PosQua",jsonencode(msgPosQua))
-                    obj.mqtt.publish("OptiTrack/"+msgNames(i)+"/PosRot",jsonencode(msgPosRot))
-                    obj.mqtt.publish("OptiTrack/"+msgNames(i)+"/Mark",jsonencode(msgMark))
-                    obj.mqtt.publish("OptiTrack/"+msgNames(i)+"/PosQuaMark",jsonencode(msgPosQuaMark))
-                    obj.mqtt.publish("OptiTrack/"+msgNames(i)+"/PosRotMark",jsonencode(msgPosRotMark))
-                    obj.pubDynamic(obj.Pythoncallback.dynamicList)
+                    msgMark.MarkerPosition = buffer(i).MarkerPosition;
+                    msgMark.MarkerSize = buffer(i).MarkerSize;
+                    msgPosQuaMark = msgPosQua;
+                    msgPosQuaMark.MarkerPosition = buffer(i).MarkerPosition;
+                    msgPosQuaMark.MarkerSize = buffer(i).MarkerSize;
+                    msgPosRotMark=msgPosRot;
+                    msgPosRotMark.MarkerPosition = buffer(i).MarkerPosition;
+                    msgPosRotMark.MarkerSize = buffer(i).MarkerSize;
+
+                    % Publish all the variants.
+                    obj.mqtt.publish("OptiTrack/"+msgNames(i)+"/PosQua",jsonencode(msgPosQua));
+                    obj.mqtt.publish("OptiTrack/"+msgNames(i)+"/PosRot",jsonencode(msgPosRot));
+                    obj.mqtt.publish("OptiTrack/"+msgNames(i)+"/Mark",jsonencode(msgMark));
+                    obj.mqtt.publish("OptiTrack/"+msgNames(i)+"/PosQuaMark",jsonencode(msgPosQuaMark));
+                    obj.mqtt.publish("OptiTrack/"+msgNames(i)+"/PosRotMark",jsonencode(msgPosRotMark));
                 end
-                % obj.mqtt.publish("OptiTrack/Control/Names",jsonencode(msgNames))
+                obj.mqtt.publish("OptiTrack/Control/Names",jsonencode(msgNames));
+                
+                % Call pubDynamic to do its thing.
+                %    Note that pubDynamic does not inherit the same
+                %    buffer of RigidBody data. Something to update?
+                obj.pubDynamic();
             end
         end
         
@@ -402,7 +458,7 @@ classdef mqttML < matlab.mixin.SetGet % Handle
             obj.mqtt_connected=0;
             obj.mqtt_server=0;
             obj.mqtt.on_message=0;
-            obj.Pythoncallback.mqttTerminate();
+            obj.Pythoncallback.mqttTerminate(obj.mqtt);
         end
 
 		% Connect to MQTT broker
@@ -421,7 +477,11 @@ classdef mqttML < matlab.mixin.SetGet % Handle
             
 			% Only connect if not already connected.
             if (~obj.mqtt_connected)
-                obj.mqtt.connect(obj.mqtt_server);
+                try
+                    obj.mqtt.connect(obj.mqtt_server);
+                catch exception
+                    fprintf('Error connecting to MQTT server, %s\nError Type: \n%s\nError Message: \n%s\n\r',obj.mqtt_server,exception.identifier,exception.message);
+                end
                 % Start the MQTT loop looking for new messages on topic.
                 obj.mqtt.loop_start();
                 obj.mqtt_connected=1;

@@ -1,0 +1,20 @@
+function javaTimerTest(varargin)
+    publisher=mqttML('auto');
+    freq=100; % Hz
+    if nargin>0
+        freq=varargin{1}; % Hz
+    end
+    period = 1/freq; % seconds
+    duration = 10/period; % default run for 10sec
+    if nargin>1
+        duration = varargin{2};
+    end
+    tic;
+    for i=1:samples
+        java.lang.Thread.sleep(period*1000);
+        publisher.publishRigidBody;
+    end
+    time=toc
+    effectiveFreq=samples/time
+end
+
