@@ -108,6 +108,7 @@ def dontdonothing():
 # respective function location to be executed for that topic.
 topic_outsourcing={
 	'OptiTrack/Control/AddObject':AddObject,
+	'OptiTrack/Control/RemObject':RemObject,
 	'OptiTrack/Control/Names':dontdonothing,
 	'default':defaultFunction
 }
