@@ -4,8 +4,6 @@ from json import dumps
 from math import pi as pie
 from cmath import exp as trueExp
 
-
-
 # The set of RigidBody objects which will be published.
 # Starts empty. See 'objectList' for the totality of possible contents.
 dynamicList = set()
