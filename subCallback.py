@@ -1,3 +1,8 @@
+# Patrick McCorkell
+# April 2021
+# US Naval Academy
+# Robotics and Control TSD
+
 import paho.mqtt.client as MQTT
 from random import randint
 from json import dumps

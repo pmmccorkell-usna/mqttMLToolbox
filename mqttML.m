@@ -1,3 +1,9 @@
+% Patrick McCorkell
+% January 2021
+% US Naval Academy
+% Robotics and Control TSD
+%
+
 classdef mqttML < matlab.mixin.SetGet % Handle
     properties(GetAccess='public', SetAccess='public')
         opti                % OptiTrack object
