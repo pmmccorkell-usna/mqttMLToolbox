@@ -28,7 +28,7 @@ def mqttConnect():
 
 	# Some settings for MQTT connection.
 	# serverIP = '127.0.0.1'	# loopback
-	serverIP = '10.60.69.244'	# OptiTrack server
+	serverIP = 'YOUR_SERVER'	# OptiTrack server
 	
 	# Unique clientname. Random element to prevent collisions during
 	# frequent reconnections, outages, intermittent issues, etc.
